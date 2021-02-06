@@ -15,8 +15,12 @@ inFile = open('genetic_codes_300_per_line', 'r')
 # inFile = open('testline', 'r')
 dnaLines = inFile.readlines()
 
+
 def processLineForWords(dnaLine, currentDataPoint, wordSize, featureNumberMap):
-    # break up the dnaLine into words of size wordSize
+    # this short-hand syntax will break up a line into chunks of wordSize like
+    #
+    # abcdefghijklmno -> ['abc', 'def', 'ghi', 'jkl', 'mno']
+    #
     wordsInLine = [
         dnaLine[i:i + wordSize]
         for i in range(0, len(dnaLine), wordSize)
