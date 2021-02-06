@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-from sklearn.datasets import make_blobs
 from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
@@ -8,76 +7,105 @@ import math
 import matplotlib.pyplot as plt
 import matplotlib
 import numpy as np
-
-# genetic code possible characters are a, c, g & t (note our data set is in lowercase)
-letters = ['a', 'c', 'g', 't']
-featureNumberMap = {}
-
-featureNumber = 0
-
-# iterate over the characters 3x to generate all possible 3-letter word combinations
-# save these into featureNumberMap as a lookup map, where each possible word generates
-# an index starting at 0 (which will generate 64 total indexes, from 0 to 63)
-for firstLetter in letters:
-    for secondLetter in letters:
-        for thirdLetter in letters:
-            featureName = firstLetter + secondLetter + thirdLetter
-            featureNumberMap[featureName] = featureNumber
-            featureNumber = featureNumber + 1
+from collections import Counter
+from itertools import product
 
 # read the data line-by-line from file (each line is already a 300 character chunk of DNA sequence)
 inFile = open('genetic_codes_300_per_line', 'r')
+# inFile = open('testline', 'r')
 dnaLines = inFile.readlines()
 
-# create our 2-dimensional array that will have:
-#   1018 rows [data points] (1 row per 300 character long DNA sequence)
-#   64 columns (1 column per feature, which is each possible 3-letter word)
-#
-# use numpy.zeros() to create the two dimensional array seeded with 0.0 (floating point) values
-featurizedDataPoints = np.zeros(shape=(len(dnaLines), 64), dtype=np.float32)
+def processLineForWords(dnaLine, currentDataPoint, wordSize, featureNumberMap):
+    # break up the dnaLine into words of size wordSize
+    wordsInLine = [
+        dnaLine[i:i + wordSize]
+        for i in range(0, len(dnaLine), wordSize)
+    ]
+    # use Counter to count the # of word occurrences (feature counts)
+    counted = Counter(wordsInLine)
+
+    # for each counted feature, find out what it's index is in the data point and set the count
+    for word, count in counted.items():
+        # lookup the index of the feature to use for the data point vector
+        featureIndex = featureNumberMap[word]
+        # set the feature count in the data point vector
+        currentDataPoint[featureIndex] = count
 
 
-def processLineForWords(dnaLine, dataPointIndex):
-    """
-      for a given DNA sequence line, iterate over all possible combinations (64, each of our features)
-      and count both it's occurrence, and it's occurrence in the reverse of the line
-    """
-    # get a pointer to the current data point (row of 64 features for the current DNA line)
-    currentDataPoint = featurizedDataPoints[dataPointIndex]
-    # get the reverse of the DNA line
-    dnaLineReverse = dnaLine[::-1]
+# prep the plot visualization
+plt.figure(figsize=(10, 10))
 
-    # for each possible DNA 3-letter word (key = DNA word, value = data point feature index)
-    for key, value in featureNumberMap.items():
-        # count the occurrences of the DNA 3-letter word in both the DNA line and the reverse of the DNA line
-        count = dnaLine.count(key) + dnaLineReverse.count(key)
-        # record the occurrence count in the appropriate feature of the current data point
-        currentDataPoint[value] = count
+# for word sizes 1-4
+for wordSize in range(1, 5):
 
+    # generates all possible feature strings (dna sequences of a, c, g & t)
+    features = list(
+        map(lambda x: ''.join(x), list(product('acgt', repeat=wordSize)))
+    )
 
-# for every data point index (300 character DNA sequence)
-for dataPointIndex in range(0, len(featurizedDataPoints)):
-    # process the 300 character DNA sequence line for words and count them
-    processLineForWords(dnaLines[dataPointIndex], dataPointIndex)
+    # take all possible features and create a map of { [feature]: [index] }
+    # this is to have a consistent index per feature in the data point
+    featureNumberMap = {}
+    featureNumber = 0
+    for feature in features:
+        featureNumberMap[feature] = featureNumber
+        featureNumber = featureNumber + 1
 
-# ok great, featurizedDataPoints now contains a fully featurized data set of
-# 1018 rows of 64 features, where each row is an array of 64 values which are a count
-# of how many times each possible word occurs in the data point
+    # create our 2-dimensional array that will have:
+    #   1018 rows [# data points]
+    #   N feature columns (1 column per feature)
+    #
+    # use numpy.zeros() to create the two dimensional array seeded with 0.0 (floating point) values
+    featurizedDataPoints = np.zeros(
+        shape=(len(dnaLines), pow(4, wordSize)),
+        dtype=np.float32
+    )
+    # iterate for every data point index
+    for index in range(0, len(featurizedDataPoints)):
+        # process the 300 character DNA sequence line for words and count them
+        processLineForWords(
+            dnaLines[index].strip(),  # the line of dna
+            featurizedDataPoints[index],  # the data point vector of features
+            wordSize,  # current word size (1-4)
+            featureNumberMap  # lookup map of feature -> feature vector index
+        )
 
-# we need to run PCA on this 64 dimensional data to bring it down to 2 dimensional data to plot
+    # ok great, featurizedDataPoints now contains a fully featurized data set of
+    # 1018 rows of [featureN] features, where each row is a vector of [featureN] values
+    # which are a count of how many times each possible feature occurs in the data point
 
-# normalize the data points
-normalizedDataPoints = StandardScaler().fit_transform(featurizedDataPoints)
-pca = PCA(n_components=2).fit_transform(normalizedDataPoints)
+    # normalize the data points
+    normalizedDataPoints = StandardScaler().fit_transform(featurizedDataPoints)
 
-plt.subplot(1, 1, 1)
+    # we need to run PCA on this normalized [featureN]-dimensional data
+    # to bring it down to 2 dimensional data to plot
+    pca = PCA(n_components=2).fit_transform(normalizedDataPoints)
 
-# plot PCA reduced data
-plt.scatter(
-    x=pca[:, 0],
-    y=pca[:, 1],
-    marker="."
-)
-plt.title("DNA Words PCA Result")
+    kMeansResult = None
 
+    # we happen to know we only want to run K-Means with n_clusters=7 on word size 3
+    if wordSize == 3:
+        # run K-Means on the normalized data to obtain clustering (to be used as plot coloring data)
+        kMeansResult = KMeans(
+            n_clusters=7,
+            n_init=10,
+        ).fit_predict(pca)
+
+    # setup a subplot (graph)
+    plt.subplot(2, 2, wordSize)
+
+    # plot PCA reduced data
+    plt.xlim((-9, 9))
+    plt.ylim((-9, 9))
+    plt.scatter(
+        c=kMeansResult,  # use K-means result for coloring
+        x=pca[:, 0],  # slice out x values
+        y=pca[:, 1],  # slice out y values
+        marker=".",  # draw a dot
+        s=3  # point size
+    )
+    plt.title("DNA Word Size " + str(wordSize))
+    plt.tight_layout()
+
+# show the whole plot
 plt.show()
