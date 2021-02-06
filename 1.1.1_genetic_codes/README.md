@@ -1,7 +1,7 @@
 # Python Libraries
 
 ```bash
-pip3 install sklearn pandas psycopg2-binary scikit-learn Matplotlib scikit-image seaborn Cython lxml bs4 beautifulsoup4
+pip3 install sklearn pandas psycopg2-binary scikit-learn Matplotlib scikit-image seaborn Cython
 ```
 
 
