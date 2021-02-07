@@ -7,62 +7,100 @@ from sklearn.datasets import make_multilabel_classification
 from collections import Counter
 import matplotlib.pyplot as plt
 from sklearn.feature_extraction.text import CountVectorizer
+import numpy as np
+import pandas as pd
+
+# we will create a plot with 5 rows and 2 columns:
+# [bar][bar][bar][bar][bar]  <-- 5 topics
+# [          bar          ]  <-- lab breakdown by topic
 
 mit_labs = set(['CSAIL', 'LIDS', 'MTL', 'RLE'])
 
 facultyDatas = json.loads(open('data/faculty', 'r').read())
 
+# collect all abstracts
+abstracts = []
 
-def abstractsForLab(lab):
-    matchingFacultyNames = []
+# track a list of labs for each article
+abstractLabs = []
 
-    for facultyData in facultyDatas:
-        if lab in facultyData['labs']:
-            matchingFacultyNames.append(facultyData['name'])
-
-    abstracts = []
-
-    for facultyName in matchingFacultyNames:
-        articleData = json.loads(
-            open('data/articles/' + facultyName, 'r').read()
-        )
-        for article in articleData['articles']:
-            abstracts.append(article['abstract'])
-
-    return abstracts
-
-
-def plot_top_words(model, feature_names, n_top_words, title):
-    fig, axes = plt.subplots(2, 5, figsize=(30, 15), sharex=True)
-    axes = axes.flatten()
-    for topic_idx, topic in enumerate(model.components_):
-        top_features_ind = topic.argsort()[:-n_top_words - 1:-1]
-        top_features = [feature_names[i] for i in top_features_ind]
-        weights = topic[top_features_ind]
-
-        ax = axes[topic_idx]
-        ax.barh(top_features, weights, height=0.7)
-        ax.set_title(f'Topic {topic_idx +1}',
-                     fontdict={'fontsize': 30})
-        ax.invert_yaxis()
-        ax.tick_params(axis='both', which='major', labelsize=20)
-        for i in 'top right left'.split():
-            ax.spines[i].set_visible(False)
-        fig.suptitle(title, fontsize=40)
-
-    plt.subplots_adjust(top=0.90, bottom=0.05, wspace=0.90, hspace=0.3)
-    plt.show()
-
-
+# LDA algo tweakable params
 n_features = 1000
 n_components = 5
 n_top_words = 10
 
 
-def processForLab(lab):
+def processAbstractsForFacultyMember(facultyMember):
+    facultyName = facultyMember['name']
+    labs = facultyMember['labs']
+    articleData = json.loads(
+        open('data/articles/' + facultyName, 'r').read()
+    )
+    for article in articleData['articles']:
+        abstracts.append(article['abstract'])
+        abstractLabs.append(labs)
 
-    abstracts = abstractsForLab(lab)
+    return abstracts
 
+
+def plotTopWords(ldaModel, feature_names, n_top_words):
+    for topic_idx, topic in enumerate(ldaModel.components_):
+        top_features_ind = topic.argsort()[:-n_top_words - 1:-1]
+        top_features = [feature_names[i] for i in top_features_ind]
+        weights = topic[top_features_ind]
+
+        subplot_offset = topic_idx * 2
+
+        plt.subplot(2, 9, subplot_offset + 1,
+                    title='Topic ' + str(topic_idx+1))
+        bar = plt.barh(top_features, weights)
+        plt.gca().axes.get_xaxis().set_visible(False)
+        plt.gca().axes.invert_yaxis()
+        plt.tick_params(axis='both', which='major', labelsize=10, pad=10)
+
+
+def plotTopicBreakdown(ldaModel, feature_names, transformed):
+    # for each topic in the transformed data (5 of them) calculate the sum of topic membership
+
+    # row = lab, column = topic contribuion
+    labSums = np.zeros(shape=(4, 5), dtype=np.float32)
+
+    for abstractIndex in range(0, len(abstracts)):
+        labs = abstractLabs[abstractIndex]
+        for lab in labs:
+            labIndex = list(mit_labs).index(lab)
+            for topicIndex in range(0, 5):
+                labSums[labIndex][topicIndex] = labSums[labIndex][topicIndex] + \
+                    transformed[abstractIndex][topicIndex]
+
+    labMemberships = np.zeros(shape=(4, 5), dtype=np.float32)
+    for labIndex in range(0, 4):
+        for topicIndex in range(0, 5):
+            labMemberships[labIndex][topicIndex] = labSums[labIndex][topicIndex] / \
+                np.sum(labSums[labIndex, :])
+
+    plt.subplot(2, 9, (10, 19), title='Topics per MIT Lab')
+
+    # we must plot each topic membership as a bar with a left offset to stack the bars
+    #   for ex see https://matplotlib.org/3.3.3/gallery/lines_bars_and_markers/horizontal_barchart_distribution.html
+    # for topicIndex in range(0, 5):
+    #     plt.barh(mit_labs, )
+
+    leftOffsets = np.zeros(4, dtype=np.float32)
+    for topicIndex in range(0, 5):
+        xValues = labMemberships[:, topicIndex]
+        plt.barh(list(mit_labs), xValues, left=leftOffsets,
+                 label='Topic ' + str(topicIndex + 1))
+        for i in range(0, len(xValues)):
+            leftOffsets[i] = leftOffsets[i] + xValues[i]
+
+
+    
+    plt.legend(ncol=len(mit_labs), bbox_to_anchor=(1, 1.1),
+              loc='right', fontsize='small')
+
+
+def processAbstracts():
     tf_vectorizer = CountVectorizer(
         max_df=0.95,
         min_df=2,
@@ -78,34 +116,27 @@ def processForLab(lab):
         learning_offset=50.,
         random_state=0
     )
-    lda.fit(tf)
-    tf_feature_names = tf_vectorizer.get_feature_names()
-    plot_top_words(lda, tf_feature_names, n_top_words, 'Topics in LDA model')
+    transformed = lda.fit_transform(tf)
 
-    # for article in articleData['articles']:
-    #     tokenized = word_tokenize(article['abstract'])
-    #     counts = Counter(tokenized)
-    #     print(counts)
+    tf_feature_names = tf_vectorizer.get_feature_names()
+    plotTopWords(lda, tf_feature_names, n_top_words)
+    plotTopicBreakdown(lda, tf_feature_names, transformed)
+
+
 # read all faculty member names
 facultyDatas = json.loads(open('data/faculty', 'r').read())
+processedCount = 0
+for faculty in facultyDatas:
+    processAbstractsForFacultyMember(faculty)
+    processedCount = processedCount + 1
 
+# prep the figure/plot
+plt.figure(figsize=(12, 10))
+plt.tight_layout()
+plt.suptitle('Topics in LDA model', fontsize=16)
 
-# for each faculty member, process (perform an arXiv search, scrape results, save as JSON to a local file)
-# for facultyData in facultyDatas:
-#     name = facultyData['name']
+# process the abstracts for LDA and plot
+processAbstracts()
 
-processForLab('CSAIL')
-
-
-# for nameWithNewline in facultyNames:
-#     name = nameWithNewline.strip()
-#     articleData = json.loads(open('data/articles/' + name, 'r').read())
-
-#     for article in articleData.articles:
-#         nltk.tokenize(article.abstract)
-
-# X, _ = make_multilabel_classification(random_state=0)
-# lda = LatentDirichletAllocation(n_components=5, random_state=0)
-# lda.fit(X)
-# transformed = lda.transform(X[-2:])
-# print("hi")
+# show the plot
+plt.show()
