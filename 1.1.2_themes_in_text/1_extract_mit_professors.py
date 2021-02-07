@@ -7,8 +7,10 @@ import json
 
 
 mit_labs = set(['CSAIL', 'LIDS', 'MTL', 'RLE'])
+url = 'https://www.eecs.mit.edu/people/faculty-advisors'
 
-page = requests.get('https://www.eecs.mit.edu/people/faculty-advisors')
+print('scraping MIT faculty data from page ' + url)
+page = requests.get(url)
 soup = BeautifulSoup(page.content, features='html.parser')
 
 def extractFacultyData(facultyNode):
@@ -40,4 +42,5 @@ facultyData = [i for i in facultyDataWithNone if i]
 pathlib.Path('data').mkdir(parents=True, exist_ok=True)
 outFile = open('data/faculty', 'w')
 
+print("writing JSON faculty data to data/faculty")
 outFile.write(json.dumps(facultyData, indent=2))
