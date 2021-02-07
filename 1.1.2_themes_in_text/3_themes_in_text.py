@@ -8,6 +8,29 @@ from collections import Counter
 import matplotlib.pyplot as plt
 from sklearn.feature_extraction.text import CountVectorizer
 
+mit_labs = set(['CSAIL', 'LIDS', 'MTL', 'RLE'])
+
+facultyDatas = json.loads(open('data/faculty', 'r').read())
+
+
+def abstractsForLab(lab):
+    matchingFacultyNames = []
+
+    for facultyData in facultyDatas:
+        if lab in facultyData['labs']:
+            matchingFacultyNames.append(facultyData['name'])
+
+    abstracts = []
+
+    for facultyName in matchingFacultyNames:
+        articleData = json.loads(
+            open('data/articles/' + facultyName, 'r').read()
+        )
+        for article in articleData['articles']:
+            abstracts.append(article['abstract'])
+
+    return abstracts
+
 
 def plot_top_words(model, feature_names, n_top_words, title):
     fig, axes = plt.subplots(2, 5, figsize=(30, 15), sharex=True)
@@ -36,13 +59,9 @@ n_components = 5
 n_top_words = 10
 
 
+def processForLab(lab):
 
-def processFacultyName(name):
-    articleData = json.loads(open('data/articles/' + name, 'r').read())
-
-    abstracts = []
-    for article in articleData['articles']:
-        abstracts.append(article['abstract'])
+    abstracts = abstractsForLab(lab)
 
     tf_vectorizer = CountVectorizer(
         max_df=0.95,
@@ -63,8 +82,6 @@ def processFacultyName(name):
     tf_feature_names = tf_vectorizer.get_feature_names()
     plot_top_words(lda, tf_feature_names, n_top_words, 'Topics in LDA model')
 
-
-
     # for article in articleData['articles']:
     #     tokenized = word_tokenize(article['abstract'])
     #     counts = Counter(tokenized)
@@ -77,8 +94,8 @@ facultyDatas = json.loads(open('data/faculty', 'r').read())
 # for facultyData in facultyDatas:
 #     name = facultyData['name']
 
+processForLab('CSAIL')
 
-processFacultyName(facultyDatas[1]['name'])
 
 # for nameWithNewline in facultyNames:
 #     name = nameWithNewline.strip()
