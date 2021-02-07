@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import json
-from nltk import word_tokenize
 from sklearn.decomposition import LatentDirichletAllocation
 from sklearn.datasets import make_multilabel_classification
 from collections import Counter
